@@ -1,0 +1,140 @@
+# One command per terminal. Run everything from the repo root.
+PY := .venv/bin/python
+
+.PHONY: help install certs server sensor actuator device attack broker \
+        server-mqtt sensor-mqtt actuator-mqtt test test-device clean \
+        firmware firmware-pqc firmware-pqc-node firmware-keys pqc-interop firmware-setup sensor-legacy enroll bench operator hsm-import \
+        bench-crypto bench-safety bench-safety-cpu
+
+help:
+	@echo "Setup:"
+	@echo "  make install        install dependencies"
+	@echo "  make certs          generate TLS certificates (once, for MQTT)"
+	@echo "  make enroll         create ML-DSA device identities (once)"
+	@echo "  make bench          measure post-quantum primitive costs"
+	@echo "  make bench-crypto   full-stats crypto/protocol benchmark (N=1000/100, raw + JSON)"
+	@echo "  make bench-safety   safety-response latency, idle CPU (needs make server running)"
+	@echo "  make bench-safety-cpu   same, under CPU load"
+	@echo ""
+	@echo "Run the demo (one per terminal):"
+	@echo "  make server         central server + dashboard on :5001"
+	@echo "  make sensor         thermometer node"
+	@echo "  make actuator       fan node"
+	@echo "  make device         ESP32 stand-in (no hardware needed)"
+	@echo "  make sensor-legacy  classical RSA node — attack 1 breaks this one"
+	@echo "  make attack         run the full attack sequence"
+	@echo '  make operator ARGS="setpoint 85"   signed operator command'
+	@echo ""
+	@echo "MQTT over TLS 1.3 instead of WebSocket:"
+	@echo "  make broker         then server-mqtt / sensor-mqtt / actuator-mqtt"
+	@echo ""
+	@echo "  make test           run the test suite"
+	@echo "  make firmware       compile the ESP32 sketch"
+
+install:
+	$(PY) -m pip install -r requirements.txt
+
+enroll:             ## create server + device ML-DSA identities (once)
+	$(PY) -m app.enroll
+
+bench:              ## measure what the post-quantum primitives cost
+	$(PY) bench.py
+
+bench-crypto:       ## full-stats crypto/protocol benchmark -- results/{raw,processed}/
+	$(PY) -m scripts.bench_crypto
+
+bench-safety:       ## safety-response latency (sensor event -> valve CLOSED), needs make server
+	$(PY) -m scripts.bench_safety_response --load idle
+
+bench-safety-cpu:   ## same, with the host under CPU load
+	$(PY) -m scripts.bench_safety_response --load cpu
+
+hsm-import:         ## move the server signing key into a PKCS#11 HSM (SIS_HSM_* set)
+	$(PY) -m scripts.hsm_import $(ARGS)
+
+operator:           ## signed operator console — the only way to move the setpoint
+	@echo 'usage: make operator ARGS="setpoint 85" | ARGS=reset | ARGS="bypass on"'
+	$(PY) -m app.nodes.operator $(ARGS)
+
+certs:
+	./scripts/make_certs.sh
+
+server:
+	$(PY) -m app.server
+
+sensor:
+	$(PY) -m app.nodes.sensor
+
+sensor-legacy:      ## classical RSA channel, so attack 1 has something to break
+	$(PY) -m app.nodes.sensor --legacy
+
+actuator:
+	$(PY) -m app.nodes.actuator
+
+device:
+	$(PY) -m app.nodes.device_sim
+
+attack:
+	$(PY) -m app.attacks.attack
+
+broker:
+	$(PY) -m app.transport.broker
+
+server-mqtt:
+	$(PY) -m app.server --mqtt
+
+sensor-mqtt:
+	$(PY) -m app.nodes.sensor --transport mqtt
+
+actuator-mqtt:
+	$(PY) -m app.nodes.actuator --transport mqtt
+
+test:
+	$(PY) -m tests.test_pqc
+	$(PY) -m tests.test_trip_logic
+	$(PY) -m tests.test_safety_invariants
+	$(PY) -m tests.test_identity
+	$(PY) -m tests.test_operator_auth
+	$(PY) -m tests.test_heartbeat
+	$(PY) -m tests.test_duplicate_identity
+	$(PY) -m tests.test_command_replay
+	$(PY) -m tests.test_actuator_resync
+	$(PY) -m tests.test_relay_driver
+	$(PY) -m tests.test_http_handshake
+	$(PY) -m tests.test_pqc_interop
+	$(PY) -m tests.test_oversized_packet
+	$(PY) -m tests.test_firmware_e2e
+	$(PY) -m tests.test_hsm
+	@echo "(test_device_leg needs a running server: make server, then make test-device)"
+
+test-device:
+	$(PY) -m tests.test_device_leg
+
+firmware:           ## compile the ESP32 sketch (needs arduino-cli + esp32 core)
+	arduino-cli compile --fqbn esp32:esp32:esp32 --warnings all firmware/sketch
+	@echo "Built. Simulate locally: open firmware/wokwi.toml, F1 -> Wokwi: Start Simulator"
+
+firmware-pqc:       ## compile the on-device ML-KEM-768 + ML-DSA-65 self-test
+	arduino-cli compile --fqbn esp32:esp32:esp32 --library firmware/pqc firmware/pqc_selftest
+
+firmware-keys:      ## emit the ESP32's flashable identity (needs make enroll first)
+	$(PY) -m scripts.emit_firmware_keys
+
+firmware-pqc-node:  ## compile the full handshake firmware (needs make firmware-keys)
+	arduino-cli compile --fqbn esp32:esp32:esp32 --library firmware/pqc firmware/sketch_pqc
+
+pqc-interop:        ## prove the vendored C interoperates with kyber-py / dilithium-py
+	$(PY) -m tests.test_pqc_interop && echo "PASS interop"
+
+firmware-setup:     ## one-time toolchain install for the firmware target
+	brew install arduino-cli
+	arduino-cli config init --overwrite
+	arduino-cli config add board_manager.additional_urls \
+	  https://espressif.github.io/arduino-esp32/package_esp32_index.json
+	arduino-cli core update-index
+	arduino-cli core install esp32:esp32
+	arduino-cli lib install "MAX6675"
+	arduino-cli lib install "DHT sensor library for ESPx"
+
+clean:
+	find . -path ./.venv -prune -o -name __pycache__ -type d -print0 | xargs -0 rm -rf
