@@ -1,0 +1,409 @@
+<title>SIS-01 Key Paths</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#fcfcfd; --card:#ffffff; --ink:#141a24; --ink-2:#4a5568; --ink-3:#78849a;
+  --rule:#d8dde6; --rule-2:#eaedf2;
+  --sense:#b45309; --crypto:#6d28d9; --wire:#0369a1; --act:#0f766e; --bad:#b91c1c;
+  --sense-bg:#fdf5e9; --crypto-bg:#f4f0fd; --wire-bg:#eaf4fb; --act-bg:#e8f6f4; --bad-bg:#fdeeee;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0f131a; --card:#161b25; --ink:#e9edf4; --ink-2:#a4b0c2; --ink-3:#77839a;
+    --rule:#2b323e; --rule-2:#1e242e;
+    --sense:#f0a94a; --crypto:#b79cf7; --wire:#5cb6e8; --act:#4fd1c0; --bad:#f08b8b;
+    --sense-bg:#2a2113; --crypto-bg:#221c34; --wire-bg:#132631; --act-bg:#12292a; --bad-bg:#2c1717;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0f131a; --card:#161b25; --ink:#e9edf4; --ink-2:#a4b0c2; --ink-3:#77839a;
+  --rule:#2b323e; --rule-2:#1e242e;
+  --sense:#f0a94a; --crypto:#b79cf7; --wire:#5cb6e8; --act:#4fd1c0; --bad:#f08b8b;
+  --sense-bg:#2a2113; --crypto-bg:#221c34; --wire-bg:#132631; --act-bg:#12292a; --bad-bg:#2c1717;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:'IBM Plex Sans',system-ui,sans-serif; line-height:1.55;
+  padding:48px 24px 96px;
+}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:56px}
+header{border-bottom:2px solid var(--ink);padding-bottom:20px}
+h1{font-size:clamp(24px,3vw,34px);font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+header p{color:var(--ink-2);margin-top:8px;max-width:70ch;font-size:15px}
+.meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-3);
+  margin-top:14px;display:flex;flex-wrap:wrap;gap:6px 22px}
+figure{display:flex;flex-direction:column;gap:14px}
+.fignum{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--crypto)}
+figure h2{font-size:19px;font-weight:600;letter-spacing:-.01em}
+.frame{background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:20px;overflow-x:auto}
+svg{display:block;max-width:100%;height:auto;min-width:640px}
+figcaption{color:var(--ink-2);font-size:14px;max-width:78ch}
+figcaption b{color:var(--ink);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:10px 24px;font-size:12.5px;color:var(--ink-2);
+  font-family:'IBM Plex Mono',monospace}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.swatch{width:11px;height:11px;border-radius:2px;border:1px solid currentColor}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+caption{text-align:left;font-weight:600;padding-bottom:8px;font-size:15px}
+th{text-align:left;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;padding:8px 12px;border-bottom:1px solid var(--rule)}
+td{padding:9px 12px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+td.m{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+</style>
+<style>
+.keybox{background:var(--crypto-bg);border:1px solid var(--crypto);border-radius:3px;
+  padding:14px 18px;font-size:13.5px;color:var(--ink-2)}
+.keybox b{color:var(--ink)}
+.warnbox{background:var(--bad-bg);border-left:3px solid var(--bad);border-radius:3px;
+  padding:14px 18px;font-size:13.5px;color:var(--ink-2)}
+.warnbox b{color:var(--ink)}
+.m{font-family:'IBM Plex Mono',monospace}
+td.ok{color:var(--act);font-weight:600}
+td.no{color:var(--bad);font-weight:600}
+</style>
+
+<div class="wrap">
+
+<header>
+  <h1>SIS-01 &mdash; every key in the system, and where it comes from</h1>
+  <p>The demonstrator carries four separate key relationships. Three are agreed
+  fresh on every connection; one is provisioned at commissioning and never
+  enters the source. The difference between them decides what each link is
+  allowed to do. Nothing here is a fixed secret hiding in the repository &mdash;
+  every key is either generated per session or provisioned at runtime. These
+  diagrams show all four, and every signature that protects them.</p>
+  <div class="meta">
+    <span>ML-KEM-768 &middot; FIPS 203</span>
+    <span>ML-DSA-65 &middot; FIPS 204</span>
+    <span>AES-256-GCM</span>
+    <span>HKDF-SHA256 over SHAKE-256</span>
+  </div>
+</header>
+
+<!-- ============ FIGURE 0 ============ -->
+<figure>
+  <div class="fignum">Figure 0</div>
+  <h2>Provisioning &mdash; where every key is born</h2>
+  <div class="frame">
+  <svg viewBox="0 0 1000 300" role="img"
+       aria-label="make enroll runs once. It generates an ML-DSA-65 keypair for the server and one for each device and operator, writes each secret to the gitignored identities directory, and generates a random 32-byte device PSK persisted to the same place. Nothing is committed. Each device is then flashed or handed its own secret.">
+    <defs>
+      <marker id="a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+      </marker>
+    </defs>
+    <rect x="30" y="120" width="200" height="70" rx="8" fill="var(--crypto-bg)" stroke="var(--crypto)" stroke-width="1.5"/>
+    <text x="130" y="150" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)">make enroll</text>
+    <text x="130" y="170" text-anchor="middle" font-size="10.5" class="m" fill="var(--ink-2)">runs once, at commissioning</text>
+
+    <!-- outputs -->
+    <g font-size="11" text-anchor="start">
+      <rect x="360" y="20" width="270" height="56" rx="6" fill="var(--card)" stroke="var(--rule)"/>
+      <text x="374" y="42" font-size="12.5" font-weight="700" fill="var(--ink)">Server ML-DSA-65 keypair</text>
+      <text x="374" y="61" class="m" fill="var(--ink-2)">public + secret &middot; signs every KEM offer</text>
+
+      <rect x="360" y="90" width="270" height="56" rx="6" fill="var(--card)" stroke="var(--rule)"/>
+      <text x="374" y="112" font-size="12.5" font-weight="700" fill="var(--ink)">Per-device ML-DSA-65 keypairs</text>
+      <text x="374" y="131" class="m" fill="var(--ink-2)">sensor, actuator &middot; each signs its handshake</text>
+
+      <rect x="360" y="160" width="270" height="56" rx="6" fill="var(--card)" stroke="var(--rule)"/>
+      <text x="374" y="182" font-size="12.5" font-weight="700" fill="var(--ink)">Operator ML-DSA-65 keypair</text>
+      <text x="374" y="201" class="m" fill="var(--ink-2)">signs setpoint / reset / bypass</text>
+
+      <rect x="360" y="230" width="270" height="56" rx="6" fill="var(--sense-bg)" stroke="var(--sense)"/>
+      <text x="374" y="252" font-size="12.5" font-weight="700" fill="var(--ink)">Random 32-byte device PSK</text>
+      <text x="374" y="271" class="m" fill="var(--sense)">generated at runtime &middot; not per-session</text>
+    </g>
+
+    <g stroke="var(--crypto)" stroke-width="1.6" marker-end="url(#a0)" color="var(--crypto)" fill="none">
+      <path d="M230 140 C 300 48, 320 48, 356 48"/>
+      <path d="M230 150 C 300 118, 320 118, 356 118"/>
+      <path d="M230 165 C 300 188, 320 188, 356 188"/>
+      <path d="M230 175 C 300 258, 320 258, 356 258"/>
+    </g>
+
+    <!-- vault -->
+    <rect x="720" y="90" width="250" height="120" rx="8" fill="var(--act-bg)" stroke="var(--act)" stroke-width="1.5"/>
+    <text x="845" y="126" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)">identities/ &nbsp;(gitignored)</text>
+    <text x="845" y="150" text-anchor="middle" font-size="11" class="m" fill="var(--ink-2)">secrets at 0600, never committed</text>
+    <text x="845" y="176" text-anchor="middle" font-size="11" class="m" fill="var(--act)">server + simulator read from here</text>
+    <text x="845" y="196" text-anchor="middle" font-size="11" class="m" fill="var(--act)">real board flashed with the PSK</text>
+    <g stroke="var(--act)" stroke-width="1.6" marker-end="url(#a0)" color="var(--act)" fill="none">
+      <line x1="630" y1="118" x2="716" y2="140"/>
+      <line x1="630" y1="258" x2="716" y2="176"/>
+    </g>
+  </svg>
+  </div>
+  <figcaption><b>One command, run once.</b> <code>make enroll</code> generates every
+  long-term key and the random device PSK, and writes them all to the gitignored
+  <code>identities/</code> directory &mdash; nothing is hard-coded and nothing is
+  committed. A real ESP32 is flashed with the printed PSK at commissioning; the
+  firmware ships with an all-zero placeholder that cannot talk to the server until
+  it is provisioned.</figcaption>
+</figure>
+
+<!-- ============ FIGURE 1 ============ -->
+<figure>
+  <div class="fignum">Figure 1</div>
+  <h2>System block diagram &mdash; who holds which key</h2>
+  <div class="frame">
+  <svg viewBox="0 0 1000 470" role="img"
+       aria-label="TT-101 and XV-101 each agree their own ML-KEM-768 session key with the logic solver and prove identity with ML-DSA-65. The operator console signs commands with its own long-term ML-DSA key. The ESP32 monitoring transmitter uses a device PSK provisioned at runtime and never committed, and its readings cannot reach the safety decision.">
+    <defs>
+      <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+      </marker>
+    </defs>
+
+    <!-- safety row -->
+    <rect x="30" y="50" width="200" height="86" rx="3" fill="var(--sense-bg)" stroke="var(--sense)" stroke-width="1.5"/>
+    <text x="130" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">TT-101</text>
+    <text x="130" y="99" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">temperature sensor</text>
+    <text x="130" y="118" text-anchor="middle" font-size="11" class="m" fill="var(--sense)">enrolled &middot; own ML-DSA key</text>
+
+    <rect x="400" y="50" width="200" height="86" rx="3" fill="var(--crypto-bg)" stroke="var(--crypto)" stroke-width="1.5"/>
+    <text x="500" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">Logic solver</text>
+    <text x="500" y="99" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">compares against setpoint</text>
+    <text x="500" y="118" text-anchor="middle" font-size="11" class="m" fill="var(--crypto)">holds one key per node</text>
+
+    <rect x="770" y="50" width="200" height="86" rx="3" fill="var(--act-bg)" stroke="var(--act)" stroke-width="1.5"/>
+    <text x="870" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">XV-101</text>
+    <text x="870" y="99" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">shutdown valve</text>
+    <text x="870" y="118" text-anchor="middle" font-size="11" class="m" fill="var(--act)">enrolled &middot; own ML-DSA key</text>
+
+    <!-- key A -->
+    <line x1="230" y1="82" x2="392" y2="82" stroke="var(--wire)" stroke-width="2" marker-end="url(#a1)" color="var(--wire)"/>
+    <text x="311" y="72" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--wire)">temperature reading</text>
+    <text x="311" y="104" text-anchor="middle" font-size="10.5" class="m" fill="var(--ink-3)">AES-256-GCM under KEY 1</text>
+
+    <!-- key B -->
+    <line x1="600" y1="82" x2="762" y2="82" stroke="var(--wire)" stroke-width="2" marker-end="url(#a1)" color="var(--wire)"/>
+    <text x="681" y="72" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--wire)">shutdown command</text>
+    <text x="681" y="104" text-anchor="middle" font-size="10.5" class="m" fill="var(--ink-3)">AES-256-GCM under KEY 2</text>
+
+    <!-- heartbeat return -->
+    <path d="M600 128 C 690 168, 700 168, 762 128" fill="none" stroke="var(--act)" stroke-width="1.6"
+          stroke-dasharray="5 4" marker-end="url(#a1)" color="var(--act)"/>
+    <text x="681" y="180" text-anchor="middle" font-size="10.5" fill="var(--act)">heartbeat every 2s &mdash; silence for 6s trips the valve</text>
+
+    <!-- operator -->
+    <rect x="400" y="240" width="200" height="80" rx="3" fill="var(--card)" stroke="var(--ink-2)" stroke-width="1.5"/>
+    <text x="500" y="268" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">Operator console</text>
+    <text x="500" y="287" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">setpoint &middot; reset &middot; bypass</text>
+    <text x="500" y="306" text-anchor="middle" font-size="11" class="m" fill="var(--ink-2)">long-term ML-DSA key</text>
+    <line x1="500" y1="240" x2="500" y2="144" stroke="var(--ink-2)" stroke-width="2" marker-end="url(#a1)" color="var(--ink-2)"/>
+    <text x="514" y="200" font-size="10.5" class="m" fill="var(--ink-2)">signed, nonced, clamped</text>
+
+    <!-- browser -->
+    <rect x="700" y="240" width="270" height="80" rx="3" fill="var(--bad-bg)" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="835" y="268" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">Browser dashboard</text>
+    <text x="835" y="287" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">holds no key at all</text>
+    <text x="835" y="306" text-anchor="middle" font-size="11" class="m" fill="var(--bad)">view only &mdash; every control refused</text>
+    <line x1="700" y1="280" x2="608" y2="280" stroke="var(--bad)" stroke-width="1.6" stroke-dasharray="4 4"/>
+    <text x="654" y="272" text-anchor="middle" font-size="15" fill="var(--bad)">&#10005;</text>
+
+    <!-- esp32 -->
+    <rect x="30" y="360" width="270" height="80" rx="3" fill="var(--card)" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="165" y="388" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)">ESP32 monitoring node</text>
+    <text x="165" y="407" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">no handshake &mdash; provisioned key</text>
+    <text x="165" y="426" text-anchor="middle" font-size="11" class="m" fill="var(--sense)">KEY 3 runtime-generated, never committed</text>
+    <path d="M300 390 L 460 390 L 460 328" fill="none" stroke="var(--ink-3)" stroke-width="1.6"
+          stroke-dasharray="4 4" marker-end="url(#a1)" color="var(--ink-3)"/>
+    <text x="380" y="382" text-anchor="middle" font-size="10.5" class="m" fill="var(--ink-3)">displayed only</text>
+    <text x="700" y="400" font-size="11.5" font-weight="600" fill="var(--bad)">cannot reach the trip decision</text>
+    <text x="700" y="420" font-size="10.5" fill="var(--ink-2)">a forged 250&deg;C reading changes nothing</text>
+  </svg>
+  </div>
+  <figcaption><b>Four key relationships, three trust levels.</b> KEY 1 and KEY 2 are
+  agreed fresh per connection and are never the same key, so breaking one link
+  yields nothing on the other. The operator holds a long-term signing key and the
+  browser holds nothing &mdash; which is why every control on the dashboard is
+  refused. KEY 3 is provisioned at runtime and never committed &mdash; but it is a
+  static key on a device that cannot run the handshake, so if it were ever
+  extracted from a board it would be forgeable; that is precisely why its
+  readings are displayed and never allowed to move the safety function.</figcaption>
+</figure>
+
+<div class="legend">
+  <span><span class="swatch" style="background:var(--sense-bg);color:var(--sense)"></span>sensing</span>
+  <span><span class="swatch" style="background:var(--crypto-bg);color:var(--crypto)"></span>decision</span>
+  <span><span class="swatch" style="background:var(--act-bg);color:var(--act)"></span>final element</span>
+  <span><span class="swatch" style="background:var(--bad-bg);color:var(--bad)"></span>untrusted / refused</span>
+  <span>&#8212; &#8212; dashed = not on the safety path</span>
+</div>
+
+<!-- ============ FIGURE 2 ============ -->
+<figure>
+  <div class="fignum">Figure 2</div>
+  <h2>How KEY 1 and KEY 2 are agreed &mdash; the same four steps, run twice</h2>
+  <div class="frame">
+  <svg viewBox="0 0 1000 400" role="img"
+       aria-label="Four-step handshake: node says hello with its role; server generates a fresh keypair and returns the 1184-byte encapsulation key signed with ML-DSA-65; node verifies that signature, encapsulates, and returns the 1088-byte ciphertext signed with its own key; both sides derive an identical 256-bit AES key that never crosses the wire.">
+    <line x1="180" y1="50" x2="180" y2="360" stroke="var(--rule)" stroke-width="1.5"/>
+    <line x1="820" y1="50" x2="820" y2="360" stroke="var(--rule)" stroke-width="1.5"/>
+    <text x="180" y="38" text-anchor="middle" font-size="13" font-weight="600" fill="var(--sense)">Node (TT-101 or XV-101)</text>
+    <text x="820" y="38" text-anchor="middle" font-size="13" font-weight="600" fill="var(--crypto)">Logic solver</text>
+
+    <line x1="180" y1="86" x2="812" y2="86" stroke="var(--ink-2)" stroke-width="1.6" marker-end="url(#a1)" color="var(--ink-2)"/>
+    <text x="500" y="78" text-anchor="middle" font-size="12" fill="var(--ink)">1 &nbsp; hello &mdash; &ldquo;I am a sensor&rdquo;</text>
+    <text x="500" y="102" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">role is checked against a fixed list; an unknown role is refused outright</text>
+
+    <line x1="820" y1="146" x2="188" y2="146" stroke="var(--crypto)" stroke-width="1.6" marker-end="url(#a1)" color="var(--crypto)"/>
+    <text x="500" y="138" text-anchor="middle" font-size="12" fill="var(--ink)">2 &nbsp; fresh public lock, <tspan class="m">1184 B</tspan>, signed with ML-DSA-65</text>
+    <text x="500" y="162" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">new keypair per connection &middot; the signature is what stops an impostor substituting their own lock</text>
+
+    <line x1="180" y1="206" x2="812" y2="206" stroke="var(--sense)" stroke-width="1.6" marker-end="url(#a1)" color="var(--sense)"/>
+    <text x="500" y="198" text-anchor="middle" font-size="12" fill="var(--ink)">3 &nbsp; sealed secret, <tspan class="m">1088 B</tspan>, signed with the node&rsquo;s own key</text>
+    <text x="500" y="222" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">the server refuses any handshake it cannot attribute to an enrolled device</text>
+
+    <rect x="60" y="256" width="240" height="76" rx="3" fill="var(--card)" stroke="var(--rule)"/>
+    <rect x="700" y="256" width="240" height="76" rx="3" fill="var(--card)" stroke="var(--rule)"/>
+    <text x="180" y="280" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">4 &nbsp; derive</text>
+    <text x="820" y="280" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">4 &nbsp; derive</text>
+    <text x="180" y="300" text-anchor="middle" font-size="10.5" class="m" fill="var(--ink-2)">SHAKE-256 &rarr; HKDF</text>
+    <text x="820" y="300" text-anchor="middle" font-size="10.5" class="m" fill="var(--ink-2)">SHAKE-256 &rarr; HKDF</text>
+    <text x="180" y="320" text-anchor="middle" font-size="11" font-weight="600" fill="var(--act)">256-bit key</text>
+    <text x="820" y="320" text-anchor="middle" font-size="11" font-weight="600" fill="var(--act)">the same 256-bit key</text>
+
+    <text x="500" y="300" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--ink)">no key crossed the wire</text>
+    <text x="500" y="320" text-anchor="middle" font-size="10.5" fill="var(--ink-3)">both sides publish a SHA-256 fingerprint instead, and they match</text>
+    <text x="500" y="368" text-anchor="middle" font-size="11" fill="var(--ink-2)">Run once for the sensor link and once for the valve link, with different
+      domain labels &mdash; so the two keys can never come out the same.</text>
+  </svg>
+  </div>
+  <figcaption><b>The fingerprints are the proof.</b> They are one-way digests, safe
+  to put on a dashboard, and identical only if both parties really did reach the
+  same secret. Comparing the sensor row against the valve row on the live
+  dashboard shows two different fingerprints from the same procedure &mdash; that is
+  domain separation, visible rather than asserted.</figcaption>
+</figure>
+
+<!-- ============ FIGURE 3 ============ -->
+<figure>
+  <div class="fignum">Figure 3</div>
+  <h2>The operator path &mdash; a signature is necessary, and not sufficient</h2>
+  <div class="frame">
+  <svg viewBox="0 0 1000 260" role="img"
+       aria-label="An operator command passes six checks in order: enrolled identity, valid ML-DSA signature, unused nonce, fresh timestamp, value within the clamp, and step size within the limit. Failing any one refuses the command.">
+    <rect x="20" y="96" width="150" height="64" rx="3" fill="var(--card)" stroke="var(--ink-2)" stroke-width="1.5"/>
+    <text x="95" y="122" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--ink)">Signed command</text>
+    <text x="95" y="141" text-anchor="middle" font-size="10.5" class="m" fill="var(--ink-2)">setpoint 85</text>
+
+    <g font-size="10.5" fill="var(--ink-2)" text-anchor="middle">
+      <rect x="200" y="96" width="118" height="64" rx="3" fill="var(--crypto-bg)" stroke="var(--crypto)"/>
+      <text x="259" y="120" font-size="11.5" font-weight="600" fill="var(--ink)">enrolled?</text>
+      <text x="259" y="139">is this a known operator</text>
+
+      <rect x="330" y="96" width="118" height="64" rx="3" fill="var(--crypto-bg)" stroke="var(--crypto)"/>
+      <text x="389" y="120" font-size="11.5" font-weight="600" fill="var(--ink)">signature?</text>
+      <text x="389" y="139">ML-DSA-65 over all fields</text>
+
+      <rect x="460" y="96" width="108" height="64" rx="3" fill="var(--crypto-bg)" stroke="var(--crypto)"/>
+      <text x="514" y="120" font-size="11.5" font-weight="600" fill="var(--ink)">nonce?</text>
+      <text x="514" y="139">used once only</text>
+
+      <rect x="580" y="96" width="108" height="64" rx="3" fill="var(--crypto-bg)" stroke="var(--crypto)"/>
+      <text x="634" y="120" font-size="11.5" font-weight="600" fill="var(--ink)">fresh?</text>
+      <text x="634" y="139">within 30 s</text>
+
+      <rect x="700" y="96" width="118" height="64" rx="3" fill="var(--sense-bg)" stroke="var(--sense)"/>
+      <text x="759" y="120" font-size="11.5" font-weight="600" fill="var(--ink)">in range?</text>
+      <text x="759" y="139">40&ndash;120 &deg;C</text>
+
+      <rect x="830" y="96" width="118" height="64" rx="3" fill="var(--sense-bg)" stroke="var(--sense)"/>
+      <text x="889" y="120" font-size="11.5" font-weight="600" fill="var(--ink)">small enough?</text>
+      <text x="889" y="139">max 15 &deg;C step</text>
+    </g>
+
+    <g stroke="var(--ink-3)" stroke-width="1.4" marker-end="url(#a1)" color="var(--ink-3)">
+      <line x1="170" y1="128" x2="194" y2="128"/><line x1="318" y1="128" x2="324" y2="128"/>
+      <line x1="448" y1="128" x2="454" y2="128"/><line x1="568" y1="128" x2="574" y2="128"/>
+      <line x1="688" y1="128" x2="694" y2="128"/><line x1="818" y1="128" x2="824" y2="128"/>
+    </g>
+
+    <text x="500" y="46" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--ink)">
+      Fail any one of these and the command is refused</text>
+    <text x="500" y="66" text-anchor="middle" font-size="11" fill="var(--ink-2)">
+      The last two apply <tspan font-style="italic">after</tspan> the signature verifies &mdash; which is the whole point</text>
+
+    <text x="500" y="212" text-anchor="middle" font-size="11.5" fill="var(--bad)" font-weight="600">
+      A correctly signed request to set the trip point to 11,100 &deg;C is refused by the clamp.</text>
+    <text x="500" y="232" text-anchor="middle" font-size="11" fill="var(--ink-2)">
+      Oldsmar, 2021: the intruder used legitimate remote access. Authentication alone would not have stopped it.</text>
+  </svg>
+  </div>
+  <figcaption><b>Why the last two boxes exist.</b> The 2021 Oldsmar water treatment
+  incident was not a broken cipher &mdash; someone reached a real control path and
+  moved a chemical setpoint from roughly 100 ppm to 11,100 ppm. Every
+  cryptographic check in this diagram would have passed. Only the clamp and the
+  step limit stop that class of attack, which is why they sit after the signature
+  rather than instead of it.</figcaption>
+</figure>
+
+<!-- ============ FIGURE 4 ============ -->
+<figure>
+  <div class="fignum">Figure 4</div>
+  <h2>What actually travels, and what it costs</h2>
+  <div class="frame">
+  <svg viewBox="0 0 1000 210" role="img"
+       aria-label="Each message is a 12-byte nonce, the ciphertext, and a 16-byte authentication tag: 28 bytes of overhead per message. The tag is checked before the valve moves.">
+    <rect x="40" y="60" width="150" height="58" rx="3" fill="var(--wire-bg)" stroke="var(--wire)" stroke-width="1.5"/>
+    <text x="115" y="84" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">nonce</text>
+    <text x="115" y="103" text-anchor="middle" font-size="11" class="m" fill="var(--wire)">12 B</text>
+
+    <rect x="200" y="60" width="480" height="58" rx="3" fill="var(--card)" stroke="var(--rule)" stroke-width="1.5"/>
+    <text x="440" y="84" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">ciphertext</text>
+    <text x="440" y="103" text-anchor="middle" font-size="11" fill="var(--ink-2)">the reading or the command, encrypted</text>
+
+    <rect x="690" y="60" width="150" height="58" rx="3" fill="var(--act-bg)" stroke="var(--act)" stroke-width="1.5"/>
+    <text x="765" y="84" text-anchor="middle" font-size="12" font-weight="600" fill="var(--ink)">tag</text>
+    <text x="765" y="103" text-anchor="middle" font-size="11" class="m" fill="var(--act)">16 B</text>
+
+    <text x="440" y="40" text-anchor="middle" font-size="11.5" fill="var(--ink-2)">fresh random nonce every single message &mdash; never counted, never reused</text>
+    <text x="765" y="150" text-anchor="middle" font-size="11" fill="var(--act)">checked before the valve moves</text>
+    <text x="765" y="168" text-anchor="middle" font-size="11" fill="var(--bad)">one flipped bit here and the whole message is thrown away</text>
+    <text x="440" y="188" text-anchor="middle" font-size="11.5" font-weight="600" fill="var(--ink)">28 bytes of overhead per message</text>
+  </svg>
+  </div>
+  <figcaption><b>The rejection is the feature.</b> A tampered packet raises inside
+  the decryption and becomes a red line on the dashboard. It is never softened,
+  and there is no plaintext fallback &mdash; a safety system that guesses at a
+  message it could not authenticate is worse than one that stops.</figcaption>
+</figure>
+
+<!-- ============ TABLE ============ -->
+<figure>
+  <div class="fignum">Table 1</div>
+  <h2>What each key can and cannot do</h2>
+  <table>
+    <thead><tr><th>Key</th><th>Where it comes from</th><th>Lifetime</th>
+      <th>Can trip the plant</th><th>If it leaks</th></tr></thead>
+    <tbody>
+      <tr><td class="m">KEY 1 &middot; sensor</td><td>ML-KEM-768, agreed per connection</td>
+        <td class="m">one session</td><td class="ok">yes</td>
+        <td>past traffic stays sealed &mdash; the keypair is already gone</td></tr>
+      <tr><td class="m">KEY 2 &middot; valve</td><td>ML-KEM-768, agreed per connection</td>
+        <td class="m">one session</td><td class="ok">yes</td>
+        <td>past traffic stays sealed; the sensor link is unaffected</td></tr>
+      <tr><td class="m">Operator</td><td>ML-DSA-65, enrolled out of band</td>
+        <td class="m">long-term</td><td class="ok">yes &mdash; within the clamp</td>
+        <td>attacker still cannot exceed the range or the step limit</td></tr>
+      <tr><td class="m">KEY 3 &middot; ESP32</td><td>random, provisioned at runtime (never committed)</td>
+        <td class="m">static per device</td><td class="no">no</td>
+        <td>static, so extractable from a board &mdash; contained by keeping this lane off the safety path</td></tr>
+    </tbody>
+  </table>
+  <div class="warnbox" style="margin-top:16px"><b>The honest residual.</b> KEY 3 is
+  no longer in the source &mdash; it is generated at runtime and provisioned into the
+  board &mdash; but it is still a <em>static</em> key, not a per-session one, on a
+  device too small to run the handshake. A dumped flash image would expose it. So
+  instead of pretending that leg is trusted, the system denies it any route to the
+  trip decision. Closing the gap fully means putting ML-KEM on the
+  microcontroller, which is future scope, not a weekend.</div>
+</figure>
+
+</div>

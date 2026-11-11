@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Post-Quantum Secure IoT Communication</title>
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&display=swap">
+<style>
+:root{
+  /* Industrial safety-controller palette: near-black ground, hard panels,
+     SCADA status semantics (green healthy / amber caution / red trip). */
+  --bg:#080b12; --panel:#0f1420; --panel-2:#151b2a; --line:#242e44; --line-2:#354364;
+  --ink:#eef2fa; --muted:#aab6d2; --faint:#7f8cb4;
+  --ok:#3ddc84; --warn:#f4b62b; --bad:#ff5b52; --info:#5aa8ff; --key:#c0a0fb;
+  --hazard:rgba(244,182,43,.12);
+  /* aliases so the seal/ladder styles resolve (were undefined before) */
+  --fg:var(--ink); --accent:var(--warn); --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --pad:clamp(9px,.8vw,16px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  font-size:clamp(13px,.9vw,18px);line-height:1.45;overflow:hidden;
+  background-image:linear-gradient(rgba(90,168,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(90,168,255,.03) 1px,transparent 1px);
+  background-size:44px 44px}
+.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.sr-only:focus{position:static;width:auto;height:auto;margin:0;clip:auto;
+  padding:.4em .8em;background:var(--info);color:#000;border-radius:4px}
+:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.lock{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
+  background:rgba(4,6,10,.92);backdrop-filter:blur(3px)}
+.lock.hidden{display:none}
+.lock-box{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+  padding:2rem 2.2rem;width:min(90vw,22rem);display:flex;flex-direction:column;gap:.8em;
+  box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.lock-tag{align-self:flex-start;font-family:'IBM Plex Sans Condensed',sans-serif;font-weight:700;
+  font-size:1.3em;color:var(--bg);background:var(--warn);padding:0 .5em;border-radius:3px}
+.lock-box h2{font-family:'IBM Plex Sans Condensed',sans-serif;font-size:1.3em;text-transform:uppercase;letter-spacing:.02em}
+.lock-hint{font-size:.85em;color:var(--faint)}
+#pin{font-family:var(--mono);font-size:2em;letter-spacing:.5em;text-align:center;
+  padding:.3em;border-radius:5px;border:1px solid var(--line-2);background:var(--panel-2);
+  color:var(--ink);width:100%}
+#pin:focus{outline:2px solid var(--info);outline-offset:2px}
+.lock-msg{font-size:.82em;min-height:1.2em;color:var(--bad)}
+.lock-btn{padding:.65em;border-radius:5px;border:1px solid var(--warn);
+  background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn);
+  font-family:var(--mono);font-weight:600;letter-spacing:.05em;cursor:pointer}
+.lock-btn:hover{background:color-mix(in srgb,var(--warn) 26%,transparent)}
+
+.app{height:100vh;display:grid;grid-template-rows:auto auto 1fr;gap:var(--pad);padding:var(--pad)}
+
+/* ---------------------------- header ---------------------------- */
+.bar{display:flex;align-items:center;gap:var(--pad);flex-wrap:wrap;
+  background:var(--panel);border:1px solid var(--line);border-radius:3px;
+  padding:calc(var(--pad)*.6) var(--pad)}
+.bar h1{font-size:1.2em;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.bar{align-items:stretch}
+.unit-tag{display:flex;align-items:center;font-family:'IBM Plex Sans Condensed',sans-serif;
+  font-weight:700;font-size:1.5em;letter-spacing:.02em;color:var(--bg);background:var(--warn);
+  padding:0 .5em;border-radius:3px}
+.titlewrap{display:flex;flex-direction:column;justify-content:center;gap:.05em}
+.bar h1{font-family:'IBM Plex Sans Condensed',sans-serif;font-size:1.28em;font-weight:700;
+  letter-spacing:.01em;white-space:nowrap;text-transform:uppercase}
+.sysstate{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;
+  padding:.2em .8em;border-left:3px solid var(--ok);border-radius:2px;
+  background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.sysstate.bad{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.sysstate-lbl{font-size:.6em;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.sysstate-val{font-family:var(--mono);font-weight:700;font-size:1.1em;color:var(--ok);letter-spacing:.03em}
+.sysstate.bad .sysstate-val{color:var(--bad)}
+.bar .sub{font-size:.78em;color:var(--faint);white-space:nowrap}
+.grow{flex:1}
+.chip{display:inline-flex;align-items:center;gap:.45em;font-size:.8em;font-weight:600;
+  padding:.32em .7em;border-radius:5px;border:1px solid var(--line);white-space:nowrap}
+.chip .dot{width:.5em;height:.5em;border-radius:50%;background:var(--faint);flex-shrink:0}
+.chip.on{color:var(--ok);border-color:rgba(74,222,128,.45)}
+.chip.on .dot{background:var(--ok)}
+
+/* ------------------ pipeline: three stations + flow ------------------ */
+.pipe{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch;gap:0}
+.node{background:var(--panel);border:1px solid var(--line);border-radius:3px;
+  padding:calc(var(--pad)*.75) var(--pad);display:flex;flex-direction:column;gap:.3em;min-width:0}
+.node.alert{border-color:rgba(251,191,36,.55)}
+.node .top{display:flex;align-items:baseline;justify-content:space-between;gap:.6em}
+.node .name{font-size:.8em;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;white-space:nowrap}
+.node .keytag{font-size:.72em;font-weight:600;padding:.15em .5em;border-radius:4px;
+  background:rgba(196,162,252,.16);color:var(--key);white-space:nowrap}
+.big{font-size:2.4em;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.big.warn{color:var(--warn)}.big.ok{color:var(--ok)}.big.off{color:var(--faint)}.big.info{color:var(--info)}
+.node .meta{font-size:.82em;color:var(--muted)}
+.node .fine{font-size:.75em;color:var(--faint)}
+
+/* the connector: a labelled link, not decoration */
+.link{width:clamp(124px,13vw,186px);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.3em;position:relative}
+.link .track{width:100%;height:2px;background:var(--line);position:relative;overflow:hidden}
+.link .track::after{content:'';position:absolute;inset:0;width:34%;
+  background:linear-gradient(90deg,transparent,var(--ok),transparent);
+  transform:translateX(-120%)}
+.link.active .track::after{animation:flow .9s ease-out}
+.link.reject .track::after{background:linear-gradient(90deg,transparent,var(--bad),transparent);
+  animation:flow .5s ease-out}
+@keyframes flow{to{transform:translateX(320%)}}
+.link .tag{font-size:.68em;color:var(--faint);white-space:nowrap;letter-spacing:.04em}
+/* The link used to read "AES-256-GCM / Key A", which tells a viewer nothing.
+   It now says what travels, that it is locked, and which key locked it. */
+.link .cargo{font-size:.74em;font-weight:600;color:var(--fg);text-align:center;
+  line-height:1.25;white-space:normal}
+.link .arrow{color:var(--accent)}
+.link .sealkey{font-size:.67em;color:var(--accent);font-family:var(--mono);
+  white-space:nowrap;margin-top:.15em}
+.link .sealnote{font-size:.63em;color:var(--faint);text-align:center;
+  line-height:1.25;white-space:normal}
+.link .sealnote.diff{color:var(--warn)}
+.link .count{font-size:.63em;color:var(--faint);font-family:var(--mono);white-space:nowrap}
+.link .count.hasreject{color:var(--bad)}
+.lad{border:1px solid var(--line);border-radius:6px;padding:.6em .8em;margin-bottom:.7em}
+.lad-h{font-weight:600;font-size:.9em;display:flex;justify-content:space-between;
+  align-items:baseline;gap:.6em;margin-bottom:.4em}
+.lad-n{font-family:var(--mono);font-size:.78em;color:var(--faint);font-weight:400}
+.lad-steps{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:.35em}
+.lad-steps li{font-size:.84em;line-height:1.45}
+.lad-steps li b{color:var(--fg)}
+.lad-steps li span{display:block;color:var(--faint);font-size:.92em;white-space:normal}
+.lad-steps code{font-family:var(--mono);color:var(--accent)}
+.okx{color:var(--ok)}.nox{color:var(--bad)}
+
+/* --------------------------- main grid --------------------------- */
+.main{display:grid;grid-template-columns:minmax(240px,1fr) minmax(300px,1.35fr) minmax(280px,1.25fr);
+  gap:var(--pad);min-height:0}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:3px;
+  display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.pane > .head{padding:calc(var(--pad)*.6) var(--pad);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:.5em;flex-shrink:0}
+.pane > .head h2{font-size:.78em;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted);font-weight:600}
+.pane > .head .hint{font-size:.72em;color:var(--faint)}
+.pane > .body{padding:calc(var(--pad)*.75);overflow-y:auto;min-height:0;flex:1}
+
+/* attack list */
+.atk{display:grid;grid-template-columns:1.5em 1fr auto;align-items:center;gap:.6em;width:100%;
+  text-align:left;background:var(--panel-2);border:1px solid var(--line);border-left:3px solid var(--line-2);
+  border-radius:5px;padding:.5em .6em;margin-bottom:.4em;color:inherit;font:inherit;cursor:pointer;
+  transition:border-color .14s,background .14s}
+.atk:last-child{margin-bottom:0}
+.atk:hover{border-color:var(--line-2);background:#243052}
+.atk[aria-pressed=true]{border-left-color:var(--info);background:#26314f}
+.atk .n{font-family:'IBM Plex Mono',monospace;font-size:.82em;font-weight:600;color:var(--faint);text-align:center}
+.atk .nm{font-size:.9em;font-weight:600;line-height:1.25}
+.atk .sev{font-size:.66em;font-weight:700;letter-spacing:.05em;padding:.15em .4em;border-radius:3px;white-space:nowrap}
+.sev-CRITICAL{background:rgba(248,113,113,.16);color:var(--bad)}
+.sev-HIGH{background:rgba(251,191,36,.16);color:var(--warn)}
+.sev-MEDIUM{background:rgba(96,165,250,.16);color:var(--info)}
+.atk .st{font-size:.68em;color:var(--faint);display:block;margin-top:.1em}
+.atk .st.def{color:var(--ok)} .atk .st.na{color:var(--faint)} .atk .st.run{color:var(--warn)}
+
+/* finding detail — the attack name is the loudest thing here */
+.finding .title{font-size:1.5em;font-weight:700;letter-spacing:-.015em;line-height:1.15;margin-bottom:.3em}
+.finding .chips{display:flex;flex-wrap:wrap;gap:.35em;margin-bottom:.8em}
+.finding .chips span{font-size:.7em;font-weight:700;letter-spacing:.05em;padding:.22em .5em;border-radius:3px}
+.st-DEFENDED{background:rgba(74,222,128,.16);color:var(--ok)}
+.st-SUCCEEDED{background:rgba(248,113,113,.16);color:var(--bad)}
+.st-NOT{background:rgba(140,153,196,.16);color:var(--faint)}
+.st-INCONCLUSIVE{background:rgba(251,191,36,.16);color:var(--warn)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:.4em .8em;font-size:.84em;align-items:baseline}
+dt{color:var(--faint);white-space:nowrap;font-weight:500}
+dd{color:var(--ink)}
+.block{margin-top:.8em}
+.block h3{font-size:.72em;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);
+  font-weight:600;margin-bottom:.25em}
+.block p{font-size:.84em;color:var(--muted);line-height:1.5}
+.empty{color:var(--faint);font-size:.85em;line-height:1.6}
+
+/* tabs */
+.tabs{display:flex;gap:.25em}
+.tab{padding:.28em .6em;border-radius:4px;border:1px solid transparent;background:none;
+  color:var(--faint);font:inherit;font-size:.76em;font-weight:600;cursor:pointer}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected=true]{background:var(--panel-2);border-color:var(--line-2);color:var(--ink)}
+#log{font-family:'IBM Plex Mono',monospace;font-size:.78em;line-height:1.65}
+#log p{display:flex;gap:.6em}
+#log time{color:var(--faint);flex-shrink:0}
+.l-ok{color:var(--ok)}.l-bad{color:var(--bad)}.l-warn{color:var(--warn)}.l-atk{color:var(--key)}
+table{width:100%;border-collapse:collapse;font-size:.76em}
+th{text-align:left;color:var(--faint);font-weight:600;padding:.35em .4em;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:.4em;border-bottom:1px solid rgba(45,56,89,.5);
+  font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+td.k{color:var(--key)}td.ok{color:var(--ok)}td.no{color:var(--bad);font-weight:600}td.num{text-align:right;color:var(--muted)}
+.hex{font-family:'IBM Plex Mono',monospace;font-size:.74em;line-height:1.5;word-break:break-all;color:var(--bad)}
+.plain{font-family:'IBM Plex Mono',monospace;font-size:.8em;line-height:1.5;color:var(--ok);white-space:pre-wrap}
+.wbox{border:1px solid;border-radius:5px;padding:.5em .6em;margin-bottom:.5em}
+.wbox.e{background:rgba(248,113,113,.05);border-color:rgba(248,113,113,.25)}
+.wbox.d{background:rgba(74,222,128,.05);border-color:rgba(74,222,128,.25);margin-bottom:0}
+.wbox .t{font-size:.72em;font-weight:600;margin-bottom:.3em;display:flex;justify-content:space-between;gap:.5em}
+.wbox.e .t{color:var(--bad)}.wbox.d .t{color:var(--ok)}
+.gap{border-left:2px solid var(--warn);padding-left:.6em;margin-bottom:.6em}
+.gap b{font-size:.86em;color:var(--warn);display:block}
+.gap span{font-size:.79em;color:var(--muted)}
+
+/* lane: safety-rated telemetry vs basic process control. The hazard stripe is
+   the point -- a BPCS number must never be mistaken for a safety one. */
+.lane{font-size:.7em;font-weight:700;letter-spacing:.06em;padding:.18em .5em;
+  border-radius:4px;white-space:nowrap}
+.lane.safety{background:rgba(74,222,128,.16);color:var(--ok)}
+.lane.bpcs{background:rgba(251,191,36,.2);color:var(--warn)}
+.node.bpcs{border-color:var(--warn);border-style:dashed;
+  background:repeating-linear-gradient(135deg,var(--panel) 0 9px,rgba(251,191,36,.07) 9px 18px)}
+.node.tripped{border-color:var(--bad);background:rgba(248,113,113,.08)}
+.big.bad{color:var(--bad)}
+
+/* SIS status panel */
+.sis{display:grid;grid-template-columns:1fr 1fr;gap:.35em .8em;margin-top:.15em}
+.sis .lbl{font-size:.68em;letter-spacing:.07em;text-transform:uppercase;
+  color:var(--faint);font-weight:600}
+.val{font-size:1.15em;font-weight:700;letter-spacing:-.01em}
+.val.ok{color:var(--ok)}.val.bad{color:var(--bad)}
+.val.warn{color:var(--warn)}.val.off{color:var(--faint)}
+
+/* the unsigned legacy path, kept so it can be seen being refused */
+.controls{margin-top:.5em;display:flex;flex-direction:column;gap:.45em}
+.ctl-h{font-size:.68em;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--faint)}
+.esd{display:flex;align-items:center;justify-content:center;gap:.5em;width:100%;
+  padding:.65em .6em;border-radius:5px;border:1px solid var(--bad);
+  background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad);
+  font-family:var(--mono);font-weight:600;font-size:.82em;letter-spacing:.04em;
+  cursor:pointer;transition:background .12s,transform .08s}
+.esd:hover{background:color-mix(in srgb,var(--bad) 24%,transparent)}
+.esd:active{transform:translateY(1px)}
+.esd:focus-visible{outline:2px solid var(--bad);outline-offset:2px}
+.esd-dot{width:.6em;height:.6em;border-radius:50%;background:var(--bad);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--bad) 25%,transparent)}
+.esd kbd{font-family:var(--mono);font-size:.85em;opacity:.6;margin-left:.2em}
+.ctl-note{font-size:.72em;color:var(--faint);line-height:1.4}
+.signed-row{display:flex;align-items:center;gap:.5em;padding:.4em .55em;
+  border:1px solid var(--line);border-radius:4px;background:var(--panel-2)}
+.signed-row::before{content:"\1F512";font-size:.85em;opacity:.7}
+.signed-row > div{display:flex;flex-direction:column;gap:.1em;min-width:0}
+.signed-row b{font-size:.82em;font-weight:600}
+.signed-row .mono{font-size:.72em;color:var(--info);overflow-x:auto;white-space:nowrap}
+.unsigned{border:1px dashed rgba(248,113,113,.5);border-radius:5px;
+  padding:.4em .5em;margin-top:.35em;background:rgba(248,113,113,.05)}
+.unsigned .tagline{font-size:.67em;font-weight:700;letter-spacing:.05em;
+  color:var(--bad);display:block;margin-bottom:.3em}
+.unsigned input[type=range]{accent-color:var(--bad)}
+.atk-group{font-size:.66em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--faint);padding:.9em .2em .35em;border-top:1px solid var(--line);margin-top:.3em}
+.atk-group:first-child{border-top:none;margin-top:0;padding-top:.2em}
+code{font-family:'IBM Plex Mono',monospace;font-size:.92em;color:var(--info)}
+
+/* controls */
+.row{display:flex;gap:.4em}
+.btn{flex:1;padding:.45em .6em;border-radius:5px;border:1px solid var(--line-2);
+  background:var(--panel-2);color:var(--ink);font:inherit;font-size:.82em;font-weight:500;
+  cursor:pointer;transition:.14s;white-space:nowrap}
+.btn:hover:not(:disabled){border-color:var(--info);color:var(--info)}
+.btn:disabled{opacity:.35;cursor:default}
+.btn kbd{font-family:'IBM Plex Mono',monospace;font-size:.85em;opacity:.6;margin-left:.35em}
+input[type=range]{width:100%;accent-color:var(--warn);cursor:pointer}
+::-webkit-scrollbar{width:7px;height:7px}
+::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:4px}
+
+@media(max-width:1180px){
+  body{overflow:auto}.app{height:auto}
+  .pipe{grid-template-columns:1fr;gap:.5em}.link{width:auto;height:2.2em}
+  .main{grid-template-columns:1fr}.pane > .body{max-height:20em}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<a href="#main" class="sr-only">Skip to controls</a>
+
+<div class="lock" id="lock" role="dialog" aria-modal="true" aria-label="Operator authentication">
+  <div class="lock-box">
+    <div class="lock-tag">SIS-01</div>
+    <h2>Operator authentication</h2>
+    <p class="lock-hint">Enter the 4-digit PIN shown in the server console.</p>
+    <input id="pin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off"
+           aria-label="Operator PIN" placeholder="••••">
+    <div class="lock-msg" id="lock-msg" role="status" aria-live="polite"></div>
+    <button class="lock-btn" id="lock-btn">Unlock</button>
+  </div>
+</div>
+<div class="app">
+
+  <div class="bar">
+    <span class="unit-tag">SIS-01</span>
+    <div class="titlewrap">
+      <h1>Emergency Shutdown Controller</h1>
+      <span class="sub">Post-quantum secured &middot; ML-KEM-768 &middot; ML-DSA-65 &middot; AES-256-GCM</span>
+    </div>
+    <span class="grow"></span>
+    <span class="sysstate ok" id="sysstate" role="status" aria-live="polite">
+      <span class="sysstate-lbl">System state</span>
+      <span class="sysstate-val" id="sysstate-val">HEALTHY</span></span>
+    <span class="chip" id="conn" role="status" aria-live="polite">
+      <span class="dot" aria-hidden="true"></span><span id="conn-text">Connecting</span></span>
+  </div>
+
+  <!-- pipeline: sensor -> server -> actuator, with the live link between them -->
+  <section class="pipe" aria-label="Signal pipeline">
+    <article class="node" id="src-card">
+      <div class="top"><span class="name" id="src-name">Temperature sensor · TT-101</span>
+        <span class="lane safety" id="lane">CAN TRIP THE PLANT</span></div>
+      <div class="big warn mono" id="temp" role="status" aria-live="polite" aria-label="Temperature">—— °C</div>
+      <div class="meta" id="humidity">Waiting for the first reading</div>
+      <div class="fine" id="lane-note">This reading is allowed to trip the plant</div>
+      <div class="fine" id="fp-sensor">No key yet — this node holds nothing until its key exchange finishes</div>
+    </article>
+
+    <div class="link" id="link-in">
+      <span class="cargo">Temperature reading<span class="arrow" aria-hidden="true"> &#9654;</span></span>
+      <div class="track" aria-hidden="true"></div>
+      <span class="sealkey" id="seal-in">locked with key &mdash;</span>
+      <span class="sealnote">only these two ends hold it</span>
+      <span class="count" id="count-in">0 sealed &middot; 0 rejected</span>
+    </div>
+
+    <article class="node" id="sis-card">
+      <div class="top"><span class="name">SIS-01 safety function</span>
+        <span class="keytag">Server view</span></div>
+      <div class="sis">
+        <div><div class="lbl">Trip state</div>
+          <div class="val ok" id="trip-state" role="status" aria-live="polite">HEALTHY</div></div>
+        <div><div class="lbl">XV-101</div>
+          <div class="val ok mono" id="valve-mini">OPEN</div></div>
+        <div><div class="lbl">Trip setpoint</div>
+          <div class="val mono" id="limit-label">80.0 °C</div></div>
+        <div><div class="lbl">Bypass</div>
+          <div class="val off" id="bypass">NOT ASSERTED</div></div>
+      </div>
+      <div class="fine" id="bounds">Bounds 40.0–120.0 °C · max single step 15.0 °C</div>
+      <div class="controls">
+        <div class="ctl-h">Operator controls</div>
+        <button class="esd" onclick="manualTrip()" title="Manual emergency shutdown (keyboard: T)">
+          <span class="esd-dot" aria-hidden="true"></span>MANUAL ESD &mdash; TRIP NOW<kbd aria-hidden="true">T</kbd></button>
+        <div class="ctl-note">A trip is always allowed &mdash; it moves the plant to its safe state.
+          Everything below reduces safety, so each needs a signed operator command.</div>
+        <div class="signed-row">
+          <div><b>Move trip setpoint</b><span class="fine mono">make operator ARGS="setpoint 85"</span></div>
+        </div>
+        <div class="signed-row">
+          <div><b>Reset a latched trip</b><span class="fine mono">make operator ARGS="reset"</span></div>
+        </div>
+        <div class="signed-row">
+          <div><b>Maintenance bypass</b><span class="fine mono">make operator ARGS="bypass on"</span></div>
+        </div>
+      </div>
+    </article>
+
+    <div class="link" id="link-out">
+      <span class="cargo"><span class="arrow" aria-hidden="true">&#9664; </span>Shutdown command</span>
+      <div class="track" aria-hidden="true"></div>
+      <span class="sealkey" id="seal-out">locked with key &mdash;</span>
+      <span class="sealnote diff">a different key &mdash; not the one above</span>
+      <span class="count" id="count-out">0 sealed &middot; 0 rejected</span>
+    </div>
+
+    <article class="node" id="act-card">
+      <div class="top"><span class="name">Shutdown valve · XV-101</span>
+        <span class="lane safety">CAN TRIP THE PLANT</span></div>
+      <div class="big ok mono" id="valve" role="status" aria-live="polite">XV-101 OPEN</div>
+      <div class="fine" id="fp-actuator">No key yet — this node holds nothing until its key exchange finishes</div>
+      <div class="controls">
+        <button class="esd" onclick="manualTrip()" title="Manual emergency shutdown (keyboard: T)">
+          <span class="esd-dot" aria-hidden="true"></span>MANUAL ESD &mdash; TRIP NOW<kbd aria-hidden="true">T</kbd></button>
+        <div class="ctl-note">The valve only ever moves toward safe from here. Reopening it after a
+          trip is a signed reset, verified with the same tag as every automatic command.</div>
+      </div>
+      <div class="fine">CLOSED is the safe state · GCM tag verified before actuation ·
+        trips if the authenticated heartbeat stops</div>
+    </article>
+  </section>
+
+  <div class="main">
+
+    <!-- attack list -->
+    <section class="pane">
+      <div class="head"><h2>Threat scenarios · rig intrusion</h2><span class="hint">Run against the live loop</span></div>
+      <div class="body" id="atk-list"></div>
+    </section>
+
+    <!-- finding detail: the attack name dominates -->
+    <section class="pane">
+      <div class="head"><h2>Incident finding</h2><span class="hint" id="finding-time"></span></div>
+      <div class="body finding" id="finding" role="region" aria-live="polite" aria-label="Attack finding detail">
+        <p class="empty">Select an attack on the left, or press 1–5.<br><br>
+           Each one runs against the live system and reports what actually happened:
+           how the attack works, what it would cost, what we observed, and what
+           stopped it.</p>
+      </div>
+    </section>
+
+    <!-- tabs -->
+    <section class="pane">
+      <div class="head">
+        <div class="tabs" role="tablist" aria-label="Detail views">
+          <button class="tab" role="tab" id="tab-0" aria-controls="pane-0" aria-selected="true" tabindex="0" onclick="tab(0)">Event log</button>
+          <button class="tab" role="tab" id="tab-1" aria-controls="pane-1" aria-selected="false" tabindex="-1" onclick="tab(1)">How the keys were agreed</button>
+          <button class="tab" role="tab" id="tab-2" aria-controls="pane-2" aria-selected="false" tabindex="-1" onclick="tab(2)">What an eavesdropper sees</button>
+          <button class="tab" role="tab" id="tab-3" aria-controls="pane-3" aria-selected="false" tabindex="-1" onclick="tab(3)">Limitations</button>
+        </div>
+      </div>
+      <div class="body">
+        <div id="pane-0" role="tabpanel" aria-labelledby="tab-0" tabindex="0">
+          <div id="log" aria-live="polite" aria-label="Security event log">
+            <p><time>--:--:--</time><span style="color:var(--faint)">Waiting for telemetry…</span></p>
+          </div>
+        </div>
+
+        <div id="pane-1" role="tabpanel" aria-labelledby="tab-1" tabindex="0" hidden>
+          <p class="fine" style="white-space:normal;margin-bottom:.8em">Every node agrees its own key
+            with the server before it is trusted with anything. Nobody types a key in, and no key is
+            ever sent. Here is what actually happened on this run:</p>
+          <div id="ladder"><p class="empty">No node has completed a key exchange yet.</p></div>
+          <table style="margin-top:.9em">
+            <thead><tr><th scope="col">Node</th><th scope="col">Carried over</th>
+              <th scope="col" class="num">Lock sent</th><th scope="col" class="num">Reply</th>
+              <th scope="col">Node's key</th><th scope="col">Server's key</th>
+              <th scope="col">Same?</th><th scope="col">Identity proved</th></tr></thead>
+            <tbody id="sessions"><tr><td colspan="8" style="color:var(--faint)">No nodes connected</td></tr></tbody>
+          </table>
+          <p class="fine" style="margin-top:.7em;white-space:normal">The two &quot;key&quot; columns are
+            SHA-256 fingerprints, not keys — one-way, safe to display, and identical only if both sides
+            really did reach the same secret. Compare the two rows: the sensor and the valve end up with
+            <b>different</b> keys, so breaking one link gets you nothing on the other.</p>
+        </div>
+        <div id="pane-2" role="tabpanel" aria-labelledby="tab-2" tabindex="0" hidden>
+          <div class="wbox e"><div class="t"><span>Ciphertext on the wire</span><span id="wire-size">—</span></div>
+            <div class="hex" id="cipher">Awaiting telemetry</div></div>
+          <div class="wbox d"><div class="t"><span>After AES-256-GCM decryption</span><span>server only</span></div>
+            <div class="plain" id="plain">Awaiting telemetry</div></div>
+        </div>
+
+        <div id="pane-3" role="tabpanel" aria-labelledby="tab-3" tabindex="0" hidden>
+          <p class="fine" style="white-space:normal;margin-bottom:.7em">
+            <b style="color:var(--ok)">Closed on this branch.</b> Device identity and
+            handshake authentication now use ML-DSA-65 (FIPS 204). A node verifies the
+            server's signature over the encapsulation key before continuing, and the
+            server refuses any handshake it cannot attribute to an enrolled device.
+            Signatures are bound to the role and to both halves of the exchange, so one
+            cannot be replayed into another session.</p>
+
+          <div class="gap"><b>Long-term signing keys have no forward secrecy</b>
+            <span>Session keys rotate per connection, but the ML-DSA identity keys do not.
+            An attacker who extracts a device's signing key can impersonate it until it is
+            re-enrolled. Mitigation is key rotation and revocation, which this system has
+            no mechanism for.</span></div>
+
+          <div class="gap"><b>Single-family cryptographic risk</b>
+            <span>ML-KEM and ML-DSA both rest on structured lattices. A break in that
+            family would take out key exchange and authentication together. NIST selected
+            HQC in March 2025 as a backup KEM on different (code-based) mathematics for
+            precisely this reason; a hybrid ML-KEM + HQC construction would remove the
+            single point of failure.</span></div>
+
+          <div class="gap"><b>No side-channel resistance</b>
+            <span>These are reference implementations in pure Python. Constant-time
+            behaviour is not guaranteed, and lattice schemes are known to be sensitive to
+            timing and power analysis on embedded targets. Production deployment needs a
+            hardened implementation such as liboqs or pqm4.</span></div>
+
+          <div class="gap"><b>Energy cost is unmeasured on real hardware</b>
+            <span>Timings here are from a laptop. Post-quantum key generation is
+            materially more expensive than ECDH on battery-powered nodes, and published
+            work on embedded energy profiling suggests this dominates the security budget
+            for duty-cycled sensors. Our figures do not capture it.</span></div>
+
+          <div class="gap"><b>The dashboard has no access control, and now no authority</b>
+            <span>Anyone reaching this interface can read it. The trip setpoint and XV-101
+            moved to a signed operator CLI, because a browser has nowhere safe to keep an
+            ML-DSA signing key. The slider and the override button below still emit their
+            old unsigned events and the server now refuses both — that refusal, visible in
+            the log, is the Oldsmar path being turned away.</span></div>
+
+          <p class="fine" style="white-space:normal">Replay was on this list until tested
+            for. Captured packets are now accepted exactly once per session key.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const socket = io(), $ = id => document.getElementById(id);
+
+const ATTACKS = [
+  {id:'silence', n:'1', name:'Silence the Safety Function', sev:'CRITICAL', group:'Documented incidents'},
+  {id:'psk',     n:'2', name:'Forge With the Leaked Key',   sev:'HIGH',     group:'Documented incidents'},
+  {id:'insider', n:'3', name:'Insider Setpoint Move',       sev:'CRITICAL', group:'Documented incidents'},
+  {id:'rogue',   n:'4', name:'Rogue Node',                  sev:'HIGH',     group:'Documented incidents'},
+  {id:'replay',  n:'5', name:'Replay a Captured Command',   sev:'HIGH',     group:'Documented incidents'},
+  {id:'mitm',    n:'6', name:'Forged Command Injection',    sev:'CRITICAL', group:'Documented incidents'},
+  {id:'shor',    n:'7', name:"Shor's Algorithm",            sev:'CRITICAL', group:'Quantum — forward-looking'},
+  {id:'kyber',   n:'8', name:'Lattice Reduction (BKZ)',     sev:'CRITICAL', group:'Quantum — forward-looking'},
+  {id:'harvest', n:'9', name:'Harvest Now, Decrypt Later',  sev:'HIGH',     group:'Quantum — forward-looking'},
+  {id:'grover',  n:'0', name:"Grover's Algorithm",          sev:'MEDIUM',   group:'Quantum — forward-looking'},
+];
+const findings = {};
+let selected = null;
+
+(function renderAttacks(){
+  let html = '', lastGroup = '';
+  for (const a of ATTACKS) {
+    if (a.group !== lastGroup) {
+      html += `<div class="atk-group">${a.group}</div>`;
+      lastGroup = a.group;
+    }
+    html += `<button class="atk" id="atk-${a.id}" aria-pressed="false" onclick="run('${a.id}')"
+          title="Run ${a.name}">
+      <span class="n" aria-hidden="true">${a.n}</span>
+      <span><span class="nm">${a.name}</span><span class="st" id="st-${a.id}">Not run</span></span>
+      <span class="sev sev-${a.sev}">${a.sev}</span></button>`;
+  }
+  $('atk-list').innerHTML = html;
+})();
+
+function run(id) {
+  select(id);
+  const st = $('st-' + id);
+  st.className = 'st run'; st.textContent = 'Running…';
+  socket.emit('trigger_attack', {attack_type: id});
+}
+
+function select(id) {
+  selected = id;
+  ATTACKS.forEach(a => $('atk-' + a.id).setAttribute('aria-pressed', String(a.id === id)));
+  render(id);
+}
+
+function render(id) {
+  const f = findings[id], meta = ATTACKS.find(a => a.id === id);
+  $('finding-time').textContent = f ? f.detected_at : '';
+  if (!f) {
+    $('finding').innerHTML =
+      `<div class="title">${meta.name}</div>
+       <div class="chips"><span class="sev-${meta.sev}">${meta.sev}</span></div>
+       <p class="empty">Not yet run. Press ${meta.n} or select it again to execute this
+          simulation against the live system.</p>`;
+    return;
+  }
+  const stClass = 'st-' + (f.status.startsWith('NOT') ? 'NOT' : f.status);
+  $('finding').innerHTML = `
+    <div class="title">${f.name}</div>
+    <div class="chips">
+      <span class="sev-${f.severity}">${f.severity}</span>
+      <span class="${stClass}">${f.status}</span>
+      <span class="st-NOT">${f.confidence}</span>
+    </div>
+    <dl>
+      <dt>Type</dt><dd>${f.family}</dd>
+      <dt>What it targets</dt><dd>${f.target}</dd>
+      <dt>Run at</dt><dd class="mono">${f.detected_at}</dd>
+    </dl>
+    <div class="block"><h3>How the attack works</h3><p>${f.vector}</p></div>
+    <div class="block"><h3>What it would cost us</h3><p>${f.impact}</p></div>
+    <div class="block"><h3>What we observed just now</h3><p>${f.evidence}</p></div>
+    <div class="block"><h3>Result</h3><p>${f.outcome}</p></div>
+    <div class="block"><h3>What stops it here</h3><p>${f.mitigation}</p></div>`;
+}
+
+socket.on('attack_result', f => {
+  findings[f.id] = f;
+  const st = $('st-' + f.id);
+  st.textContent = f.status;
+  st.className = 'st ' + (f.status === 'DEFENDED' ? 'def' : 'na');
+  if (selected === f.id) render(f.id);
+  else if (selected === null) select(f.id);
+});
+socket.on('attack_findings', d => {
+  (d.findings || []).forEach(f => {
+    findings[f.id] = f;
+    const st = $('st-' + f.id);
+    if (st) { st.textContent = f.status; st.className = 'st ' + (f.status === 'DEFENDED' ? 'def' : 'na'); }
+  });
+});
+
+function submitPin(){
+  const pin = $('pin').value.trim();
+  if (!/^\d{4}$/.test(pin)) { $('lock-msg').textContent = 'Enter 4 digits.'; return; }
+  socket.emit('verify_pin', {pin});
+}
+socket.on('pin_result', d => {
+  if (d.ok) { $('lock').classList.add('hidden'); }
+  else { $('lock-msg').textContent = 'Incorrect PIN.'; $('pin').value=''; $('pin').focus(); }
+});
+$('lock-btn').addEventListener('click', submitPin);
+$('pin').addEventListener('keydown', e => { if (e.key === 'Enter') submitPin(); });
+window.addEventListener('load', () => $('pin').focus());
+
+socket.on('connect', () => {
+  $('conn').classList.add('on'); $('conn-text').textContent = 'Connected';
+  socket.emit('dashboard_ready');
+});
+socket.on('disconnect', () => {
+  $('conn').classList.remove('on'); $('conn-text').textContent = 'Disconnected';
+});
+
+function pulse(el, reject) {
+  el.classList.remove('active','reject'); void el.offsetWidth;
+  el.classList.add(reject ? 'reject' : 'active');
+}
+
+socket.on('update_telemetry', d => {
+  // safety_relevant is the whole distinction: a BPCS reading is shown, never obeyed.
+  const safety = d.safety_relevant !== false;
+  $('src-card').classList.toggle('bpcs', !safety);
+  $('src-name').textContent = safety ? 'Temperature sensor · TT-101' : (d.source || 'Monitoring transmitter');
+  $('lane').className = 'lane ' + (safety ? 'safety' : 'bpcs');
+  $('lane').textContent = safety ? 'CAN TRIP THE PLANT' : 'CANNOT TRIP THE PLANT';
+  $('lane-note').textContent = safety
+    ? 'This reading is allowed to trip the plant · proved its identity with ML-DSA-65'
+    : 'Monitoring only · this one is NOT allowed to trip the plant · its key is in the source code';
+  // A BPCS reading stays grey even when it is over the setpoint, because it is
+  // not allowed to mean anything to the safety function.
+  $('temp').className = 'big mono ' + (!safety ? 'off' : (d.over_setpoint ? 'bad' : 'warn'));
+  $('temp').textContent = d.temp.toFixed(2) + ' °C' + (safety ? '' : '  (BPCS)');
+  $('humidity').textContent = 'Relative humidity ' + d.humidity.toFixed(2) + ' %';
+  pulse($('link-in'), false);
+  if (safety) countSeal('count-in', false);
+  applySis(d);
+  if (d.wire && d.wire.ciphertext) {
+    $('cipher').textContent = d.wire.nonce + d.wire.ciphertext;
+    $('plain').textContent = JSON.stringify({temperature:d.temp, humidity:d.humidity}, null, 2);
+    $('wire-size').textContent = d.wire.bytes_on_wire + ' bytes';
+  }
+});
+
+/* One reader for every shape of SIS state: update_telemetry carries the same
+   four fields sis_state does, so neither can drift from the other. */
+function applySis(s) {
+  if (typeof s.setpoint === 'number') setSetpoint(s.setpoint);
+  if (typeof s.setpoint_min === 'number') setBounds(s);
+  if (s.trip_state) setTrip(s.trip_state);
+  if (s.valve) setValve(s.valve);
+  if (s.bypass !== undefined) setBypass(s.bypass);
+}
+
+function setSetpoint(v) {
+  // The dashboard reports the setpoint; it no longer proposes one, so this is a
+  // display update only.
+  $('limit-label').textContent = v.toFixed(1) + ' °C';
+}
+function setBounds(s) {
+  $('bounds').textContent = 'Bounds ' + s.setpoint_min.toFixed(1) + '–' +
+    s.setpoint_max.toFixed(1) + ' °C · max single step ' + s.max_step.toFixed(1) +
+    ' °C · signed operator command only';
+}
+function setTrip(t) {
+  const tripped = t === 'TRIPPED';
+  $('trip-state').className = 'val ' + (tripped ? 'bad' : 'ok');
+  $('trip-state').textContent = tripped ? 'TRIPPED (LATCHED)' : 'HEALTHY';
+  $('sis-card').classList.toggle('tripped', tripped);
+  // the header annunciator mirrors the safety function's state
+  $('sysstate').className = 'sysstate ' + (tripped ? 'bad' : 'ok');
+  $('sysstate-val').textContent = tripped ? 'TRIPPED' : 'HEALTHY';
+}
+function setValve(v) {
+  const closed = v === 'CLOSED';
+  $('valve').className = 'big mono ' + (closed ? 'bad' : 'ok');
+  $('valve').textContent = 'XV-101 ' + (closed ? 'CLOSED' : 'OPEN');
+  $('valve-mini').className = 'val mono ' + (closed ? 'bad' : 'ok');
+  $('valve-mini').textContent = closed ? 'CLOSED' : 'OPEN';
+  $('act-card').classList.toggle('tripped', closed);
+}
+function setBypass(b) {
+  $('bypass').className = 'val ' + (b ? 'warn' : 'off');
+  $('bypass').textContent = b ? 'ASSERTED' : 'NOT ASSERTED';
+  $('sis-card').classList.toggle('alert', b);
+}
+
+socket.on('sis_state', applySis);
+socket.on('update_actuator_ui', d => setValve(d.valve));
+
+socket.on('security_log', l => {
+  const cls = {SUCCESS:'l-ok',ERROR:'l-bad',ALERT:'l-warn',ATTACK:'l-atk'}[l.type] || 'l-ok';
+  if (/XV-101|TRIP latched|Trip reset/.test(l.msg)) pulse($('link-out'), false);
+  if (/REJECTED|Tampering/.test(l.msg)) { pulse($('link-out'), true); countSeal('count-out', true); }
+  const log = $('log'), p = document.createElement('p');
+  p.innerHTML = '<time></time><span class="' + cls + '"></span>';
+  p.querySelector('time').textContent = new Date().toLocaleTimeString();
+  p.querySelector('span').textContent = l.msg;
+  log.appendChild(p); log.parentElement.scrollTop = log.parentElement.scrollHeight;
+  while (log.children.length > 300) log.removeChild(log.firstChild);
+});
+
+socket.on('update_actuator_ui', () => countSeal('count-out', false));
+
+socket.on('pqc_status', d => {
+  const rows = d.sessions || [];
+  $('sessions').innerHTML = rows.length ? rows.map(s => `
+    <tr><td class="k">${s.node}</td><td>${s.transport === 'mqtt' ? 'MQTT/TLS 1.3' : 'WebSocket'}</td>
+      <td class="num">${s.public_key_bytes}</td><td class="num">${s.ciphertext_bytes}</td>
+      <td class="k">${s.node_fingerprint}</td><td class="k">${s.server_fingerprint}</td>
+      <td class="${s.agreed ? 'ok':'no'}">${s.agreed ? 'YES':'NO'}</td>
+      <td class="${s.authenticated ? 'ok':'no'}">${s.authenticated ? 'ML-DSA-65':'NONE'}</td></tr>`).join('')
+    : '<tr><td colspan="8" style="color:var(--faint)">No nodes connected</td></tr>';
+  const sensor = rows.find(s => s.role === 'sensor');
+  const actuator = rows.find(s => s.role === 'actuator');
+  // Always attributed to the safety sensor, so it can never be read as
+  // describing whatever BPCS source happens to be on the card right now.
+  $('fp-sensor').textContent = sensor
+    ? 'Own key ' + sensor.server_fingerprint + ' · agreed by ML-KEM-768 · identity proved by ML-DSA-65'
+    : 'No key yet — this node holds nothing until its key exchange finishes';
+  $('fp-actuator').textContent = actuator
+    ? 'Own key ' + actuator.server_fingerprint + ' · agreed by ML-KEM-768 · identity proved by ML-DSA-65'
+    : 'No key yet — this node holds nothing until its key exchange finishes';
+
+  // The fingerprints on the two links are what make domain separation visible:
+  // same handshake, same maths, two keys that are plainly not each other.
+  setSeal('seal-in', sensor);
+  setSeal('seal-out', actuator);
+  renderLadder(sensor, actuator);
+});
+
+function setSeal(id, row) {
+  $(id).textContent = row ? 'locked with key ' + row.server_fingerprint : 'locked with key —';
+}
+
+/* Packet counters, so "sealed" is a number a viewer can watch move rather than
+   a claim they have to take on trust. */
+const seals = {'count-in': [0, 0], 'count-out': [0, 0]};
+function countSeal(id, rejected) {
+  const c = seals[id];
+  c[rejected ? 1 : 0]++;
+  $(id).textContent = c[0] + ' sealed · ' + c[1] + ' rejected';
+  if (c[1]) $(id).classList.add('hasreject');
+}
+
+/* The handshake, drawn as the four steps it actually is. Byte counts are the
+   real ML-KEM-768 sizes reported by the server, not decoration. */
+function renderLadder(sensor, actuator) {
+  const el = $('ladder');
+  if (!el) return;
+  const rows = [sensor, actuator].filter(Boolean);
+  if (!rows.length) {
+    el.innerHTML = '<p class="empty">No node has completed a key exchange yet.</p>';
+    return;
+  }
+  el.innerHTML = rows.map(r => `
+    <div class="lad">
+      <div class="lad-h">${r.role === 'sensor' ? 'Temperature sensor' : 'Shutdown valve'}
+        <span class="lad-n">${r.node}</span></div>
+      <ol class="lad-steps">
+        <li><b>Server makes a fresh throwaway lock</b><span>a new one per connection, so
+          recording today's traffic is useless tomorrow</span></li>
+        <li><b>Server sends the open lock, signed</b>
+          <span>${r.public_key_bytes} bytes · the ML-DSA-65 signature is what stops
+          an impostor swapping in their own lock</span></li>
+        <li><b>Node locks a secret inside it</b>
+          <span>${r.ciphertext_bytes} bytes back · only the server's private half can open it</span></li>
+        <li><b>Both sides grind that secret into the same ${r.aes_key_bits}-bit key</b>
+          <span>node got <code>${r.node_fingerprint}</code>, server got
+          <code>${r.server_fingerprint}</code> —
+          <b class="${r.agreed ? 'okx' : 'nox'}">${r.agreed ? 'identical' : 'MISMATCH'}</b>,
+          and the key itself never crossed the wire</span></li>
+      </ol>
+    </div>`).join('');
+}
+
+/* Manual emergency shutdown. Unlike a setpoint change or a reset, tripping is
+   the fail-safe direction, so this control genuinely acts -- exactly like the
+   red button in a real control room. The dangerous directions stay on the
+   signed CLI. */
+function manualTrip(){ socket.emit('manual_trip'); }
+function tab(i){
+  [0,1,2,3].forEach(n => {
+    const t = $('tab-' + n);
+    t.setAttribute('aria-selected', String(n === i));
+    t.tabIndex = n === i ? 0 : -1;
+    $('pane-' + n).hidden = n !== i;
+  });
+  $('tab-' + i).focus();
+}
+
+document.querySelector('[role=tablist]').addEventListener('keydown', e => {
+  const cur = [0,1,2,3].find(n => $('tab-' + n).getAttribute('aria-selected') === 'true');
+  if (e.key === 'ArrowRight') { e.preventDefault(); tab((cur + 1) % 4); }
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); tab((cur + 3) % 4); }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea, [contenteditable]')) return;
+  const hit = ATTACKS.find(a => a.n === e.key);
+  if (hit) { run(hit.id); return; }
+  if (e.key === 't' || e.key === 'T') manualTrip();
+});
+</script>
+</body>
+</html>
